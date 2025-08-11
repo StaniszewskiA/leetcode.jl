@@ -239,9 +239,31 @@ function generate_solution_template(question_data, question_details)
     
     test_assertions = ""
     if !isempty(test_cases)
+        expected_outputs = []
+        output_matches = collect(eachmatch(r"Output:\s*([^\n\r]+)", description))
+
+        for match in output_matches
+            output_str = strip(match.captures[1])
+            if lowercase(output_str) == "true"
+                push!(expected_outputs, "true")
+            elseif lowercase(output_str) == "false"
+                push!(expected_outputs, "false")
+            elseif occursin(r"^\d+$", output_str)
+                push!(expected_outputs, output_str)
+            else
+                push!(expected_outputs, "\"$output_str\"")
+            end
+        end
+
+        expected_outputs_str = if !isempty(expected_outputs)
+            "[$(join(expected_outputs, ", "))]"
+        else
+            "[true, false]  # TODO: Update with actual expected results"
+        end
+
         test_assertions = """
         test_inputs = [$(join(split(strip(test_cases), "\n"), ", "))]
-            expected_outputs = [true, false]  # TODO: Update with actual expected results
+            $(expected_outputs_str) 
             
             for (i, input_val) in enumerate(test_inputs)
                 if i <= length(expected_outputs)
