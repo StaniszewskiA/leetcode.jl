@@ -176,6 +176,8 @@ function rust_to_julia_signature(rust_code::String)
         "Vec<i32>" => "Vector{Int32}",
         "Vec<i64>" => "Vector{Int64}",
         "Vec<String>" => "Vector{String}",
+        "Vec<Vec<i32>>" => "Vector{Vector{Int32}}",
+        "Vec<Vec<i64>>" => "Vector{Vector{Int64}}",
         "&str" => "String",
         "Option<i32>" => "Union{Int32,Nothing}",
         "Option<bool>" => "Union{Bool,Nothing}"
@@ -239,38 +241,28 @@ function generate_solution_template(question_data, question_details)
     
     test_assertions = ""
     if !isempty(test_cases)
-        expected_outputs = []
-        output_matches = collect(eachmatch(r"Output:\s*([^\n\r]+)", description))
+        example_matches = collect(eachmatch(r"Example \d+:\s*\n\s*Input:\s*([^\n]+)\s*\n\s*Output:\s*([^\n]+)", description))
+        if !isempty(example_matches)
+            test_cases_code = []
+            for (i, match) in enumerate(example_matches)
+                input_str = strip(match.captures[1])
+                output_str = strip(match.captures[2])
 
-        for match in output_matches
-            output_str = strip(match.captures[1])
-            if lowercase(output_str) == "true"
-                push!(expected_outputs, "true")
-            elseif lowercase(output_str) == "false"
-                push!(expected_outputs, "false")
-            elseif occursin(r"^\d+$", output_str)
-                push!(expected_outputs, output_str)
-            else
-                push!(expected_outputs, "\"$output_str\"")
+                input_str = strip(replace(input_str, r"^[^=]*=" => ""))
+                output_str = strip(replace(output_str, r"^[^=]*=" => ""))
+
+                test_case = "    @assert $(function_name)($(input_str)) == $(output_str) \"Test case $(i) failed\""
+                push!(test_cases_code, test_case)
             end
-        end
 
-        expected_outputs_str = if !isempty(expected_outputs)
-            "[$(join(expected_outputs, ", "))]"
+            test_assertions = join(test_cases_code, "\n")
+
         else
-            "[true, false]  # TODO: Update with actual expected results"
+            # Fallback
+            test_assertions = "    # TODO: Add test cases based on the problem examples\n    # @assert $(function_name)(test_input) == expected_output \"Test failed\""
         end
-
-        test_assertions = """
-        test_inputs = [$(join(split(strip(test_cases), "\n"), ", "))]
-            $(expected_outputs_str) 
-            
-            for (i, input_val) in enumerate(test_inputs)
-                if i <= length(expected_outputs)
-                    @assert $(function_name)(input_val) == expected_outputs[i] "Test case \$i failed: $(function_name)(\$input_val)"
-                end
-            end
-        """
+    else 
+        test_assertions = "    # TODO: Add test cases based on the problem examples\n    # @assert $(function_name)(test_input) == expected_output \"Test failed\""
     end
     
     template = """
@@ -291,7 +283,7 @@ function generate_solution_template(question_data, question_details)
     function test_solution()
         println("Testing solution...")
         
-        $(test_assertions)
+    $(test_assertions)
         
         println("All tests passed!")
     end
