@@ -6,3 +6,10 @@
 - Convert Rust function signature to Julia equivalent
 - Generate `.jl` solution template with proper function signature and test structure
 - Voilà
+
+## How to use it?
+
+ - Navigate to \src
+ - Run `.\fetch_daily_question.jl`
+ - Navigate to solution folder
+ - Implement solution and run an appropriate script for testing 

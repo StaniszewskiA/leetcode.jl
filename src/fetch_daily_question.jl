@@ -277,7 +277,6 @@ function generate_solution_template(question_data, question_details)
 
     $(julia_signature)
         # TODO: Implement solution
-        return false  # or appropriate default
     end
 
     function test_solution()
