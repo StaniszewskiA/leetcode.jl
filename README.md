@@ -13,3 +13,8 @@
  - Run `.\fetch_daily_question.jl`
  - Navigate to solution folder
  - Implement solution and run an appropriate script for testing 
+
+## TODO:
+
+ - Retrieve args params from Rust signature to avoid further conversions,
+ - Add type signatures to all methods

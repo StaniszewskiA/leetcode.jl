@@ -11,20 +11,13 @@ function fetch_daily_leetcode()
     {
         activeDailyCodingChallengeQuestion {
             date
-            userStatus
             link
             question {
-                acRate
                 difficulty
-                freqBar
                 frontendQuestionId: questionFrontendId
-                isFavor
-                paidOnly: isPaidOnly
                 status
                 title
                 titleSlug
-                hasVideoSolution
-                hasSolution
                 topicTags {
                     name
                     id
@@ -171,6 +164,8 @@ function rust_to_julia_signature(rust_code::String)
     type_mapping = Dict(
         "i32" => "Int32",
         "i64" => "Int64", 
+        "f32" => "Float32",
+        "f64" => "Float64",
         "bool" => "Bool",
         "String" => "String",
         "Vec<i32>" => "Vector{Int32}",
@@ -208,8 +203,89 @@ function rust_to_julia_signature(rust_code::String)
 end
 
 """
-Generate Leetcode-like problem template
+Extract parameter types from Julia function signature.
 """
+function extract_param_types(julia_signature::String)
+    param_match = match(r"function\s+\w+\((.*?)\)", julia_signature)
+    if param_match === nothing
+        return []
+    end
+
+    param_str = param_match.captures[1]
+    if isempty(strip(param_str))
+        return []
+    end
+
+    param_types = []
+    param_parts = split(param_str, ",")
+
+    for param in param_parts
+        param = strip(param)
+        if occursin("::", param)
+            type_match = match(r".*::\s*(.+)$", param)
+            if type_match !== nothing
+                push!(param_types, strip(type_match.captures[1]))
+            end
+        end
+    end
+
+    return param_types
+end
+
+"""
+Typecast arguments inside tests cases.
+"""
+function typecast_test_args(
+    value_str::AbstractString, 
+    param_types::Vector, 
+    param_idx::Int = 1, 
+    is_input::Bool = true
+)
+    value_str = strip(String(value_str))
+    expected_type = length(param_types) >= param_idx ? String(param_types[param_idx]) : ""
+
+    if startswith(value_str, "[") && endswith(value_str, "]")
+        if !isempty(expected_type) && occursin("Vector", expected_type)
+            return "$(expected_type)($value_str)"
+        else
+            # Fallback logic
+            if occursin("[[", value_str) || occursin("],[", value_str)
+                return "Vector{Vector{Int32}}($value_str)"
+            else
+                return "Vector{Int32}($value_str)"
+            end
+        end
+    end
+
+    # Handle booleans
+    if lowercase(value_str) == "true"
+        return "true"
+    elseif lowercase(value_str) == "false"
+        return "false"
+    end
+
+    # Handle numerics
+    if occursin(r"^\d+$", value_str)
+        if is_input && !isempty(expected_type) && occursin("Int", expected_type)
+            return "$(expected_type)($value_str)"
+        elseif is_input
+            return "Int32($value_str)"
+        else
+            return value_str
+        end
+    end
+
+    # Handle strings
+    if startswith(value_str, "\"") && endswith(value_str, "\"")
+        return value_str
+    end
+
+    # Fallback
+    if !occursin(r"^[\d\[\]]+$", value_str) && !occursin("true", lowercase(value_str)) && !occursin("false", lowercase(value_str))
+        return "\"$value_str\""
+    end
+end
+
 function generate_solution_template(question_data, question_details)
     if question_data === nothing || question_details === nothing
         return nothing
@@ -238,6 +314,7 @@ function generate_solution_template(question_data, question_details)
 
     description = get(question_details, "content", "$(question.title)")
     test_cases = get(question_details, "testCases", "")
+    param_types = extract_param_types(julia_signature)
     
     test_assertions = ""
     if !isempty(test_cases)
@@ -246,20 +323,44 @@ function generate_solution_template(question_data, question_details)
             test_cases_code = []
             for (i, match) in enumerate(example_matches)
                 input_str = strip(match.captures[1])
-                output_str = strip(match.captures[2])
-
                 input_str = strip(replace(input_str, r"^[^=]*=" => ""))
+
+                output_str = strip(match.captures[2])
                 output_str = strip(replace(output_str, r"^[^=]*=" => ""))
 
-                test_case = "    @assert $(function_name)($(input_str)) == $(output_str) \"Test case $(i) failed\""
+                if length(param_types) > 1 && occursin(",", input_str)
+                    input_parts = split(input_str, ",")
+                    typed_inputs = []
+                    for (j, part) in enumerate(input_parts)
+                        part = strip(part)
+                        if occursin("=", part)
+                            value_part = strip(split(part, "=")[2])
+                        else
+                            value_part = part
+                        end
+                        typed_input = typecast_test_args(value_part, param_types, j, true)
+                        push!(typed_inputs, typed_input)
+                    end
+                    typed_input = join(typed_inputs, ", ")
+                else
+                    typed_input = typecast_test_args(input_str, param_types, 1, true)
+                end
+
+                # Handle numeric output
+                if occursin(r"^\d+(\.\d+)?$", output_str)
+                    typed_output = output_str
+                else
+                    typed_output = typecast_test_args(output_str, [], 1, false)
+                end
+                test_case = "    @assert $(function_name)($(typed_input)) == $(typed_output) \"Test case $(i) failed\""
                 push!(test_cases_code, test_case)
             end
 
             test_assertions = join(test_cases_code, "\n")
-
         else
             # Fallback
             test_assertions = "    # TODO: Add test cases based on the problem examples\n    # @assert $(function_name)(test_input) == expected_output \"Test failed\""
+
         end
     else 
         test_assertions = "    # TODO: Add test cases based on the problem examples\n    # @assert $(function_name)(test_input) == expected_output \"Test failed\""
