@@ -241,7 +241,7 @@ function typecast_test_args(
     param_idx::Int = 1, 
     is_input::Bool = true
 )
-    value_str = strip(String(value_str))
+    value_str = strip(string(value_str))
     expected_type = length(param_types) >= param_idx ? String(param_types[param_idx]) : ""
 
     if startswith(value_str, "[") && endswith(value_str, "]")
@@ -314,7 +314,8 @@ function generate_solution_template(question_data, question_details)
 
     description = get(question_details, "content", "$(question.title)")
     test_cases = get(question_details, "testCases", "")
-    param_types = extract_param_types(julia_signature)
+
+    param_types = extract_param_types(string(julia_signature))
     
     test_assertions = ""
     if !isempty(test_cases)
